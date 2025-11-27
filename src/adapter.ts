@@ -22,6 +22,50 @@ export interface WalletConnectAdapterConfig {
    * @see https://docs.reown.com/appkit/react/core/theming#themevariables
    */
   themeVariables?: ThemeVariables;
+  /**
+   * Control the display of "All Wallets" button.
+   * @default `HIDE` (recommended for Tron as most wallets don't support it)
+   * @see https://docs.reown.com/appkit/react/core/options
+   */
+  allWallets?: 'SHOW' | 'HIDE' | 'ONLY_MOBILE';
+  /**
+   * List of featured wallet IDs to display first (in order).
+   * @see https://walletguide.walletconnect.network/ to find wallet IDs
+   */
+  featuredWalletIds?: string[];
+  /**
+   * Whitelist of wallet IDs to include (if set, only these wallets will be shown).
+   */
+  includeWalletIds?: string[];
+  /**
+   * Blacklist of wallet IDs to exclude.
+   */
+  excludeWalletIds?: string[];
+  /**
+   * Custom wallets to add to the list.
+   */
+  customWallets?: any[];
+  /**
+   * Enable Reown cloud analytics.
+   * @default true
+   */
+  enableAnalytics?: boolean;
+  /**
+   * Enable debug logs.
+   * @default false
+   */
+  debug?: boolean;
+  /**
+   * Enable mobile deep linking optimization.
+   * When enabled, automatically configures mobile wallet IDs and settings for better deep linking support.
+   * @default true
+   */
+  enableMobileDeepLink?: boolean;
+  /**
+   * Additional AppKit configuration options.
+   * Any extra properties will be passed directly to createAppKit.
+   */
+  [key: string]: any;
 }
 
 export enum WalletConnectMethods {
@@ -57,6 +101,12 @@ export class WalletConnectWallet {
   private address: string | undefined;
   private eventListeners = new Map<string, Set<Function>>();
   private sessionHandlers: { update?: (args: any) => void; delete?: (args: any) => void } = {};
+  private modalStateUnsubscribe: (() => void) | undefined;
+  private eventUnsubscribers: Array<() => void> = [];
+
+  // Cache subscription requests before AppKit is created
+  private pendingModalCallbacks: Array<(state: any) => void> = [];
+  private pendingEventCallbacks: Array<(event: any) => void> = [];
 
   constructor(config: WalletConnectAdapterConfig) {
     this._options = config.options;
@@ -141,7 +191,11 @@ export class WalletConnectWallet {
   }
 
   removeAllListeners(event?: string): void {
-    event ? this.eventListeners.delete(event) : this.eventListeners.clear();
+    if (event) {
+      this.eventListeners.delete(event);
+    } else {
+      this.eventListeners.clear();
+    }
   }
 
   private setupSessionListeners(): void {
@@ -192,6 +246,38 @@ export class WalletConnectWallet {
     this._client.on('session_delete', this.sessionHandlers.delete);
   }
 
+  private setupModalListeners(): void {
+    if (!this.appKit) return;
+
+    // Clean up existing subscription
+    if (this.modalStateUnsubscribe) {
+      this.modalStateUnsubscribe();
+      this.modalStateUnsubscribe = undefined;
+    }
+
+    // Clean up existing event subscriptions
+    while (this.eventUnsubscribers.length > 0) {
+      const unsubscribe = this.eventUnsubscribers.shift()!;
+      unsubscribe();
+    }
+
+    // Process cached modal state subscriptions
+    while (this.pendingModalCallbacks.length > 0) {
+      const callback = this.pendingModalCallbacks.shift()!;
+      const unsubscribe = this.appKit.subscribeState(callback);
+      if (!this.modalStateUnsubscribe) {
+        this.modalStateUnsubscribe = unsubscribe;
+      }
+    }
+
+    // Process cached event subscriptions
+    while (this.pendingEventCallbacks.length > 0) {
+      const callback = this.pendingEventCallbacks.shift()!;
+      const unsubscribe = this.appKit.subscribeEvents(callback);
+      this.eventUnsubscribers.push(unsubscribe);
+    }
+  }
+
   async connect(): Promise<WalletConnectWalletInit> {
     const provider = await this.getProvider();
     const client = provider.client as unknown as WalletConnectClient;
@@ -212,17 +298,42 @@ export class WalletConnectWallet {
       };
     } else {
       if (!this.appKit) {
+        // Extract known configuration properties
+        const {
+          network,
+          options,
+          themeMode,
+          themeVariables,
+          allWallets,
+          featuredWalletIds,
+          includeWalletIds,
+          excludeWalletIds,
+          customWallets,
+          enableAnalytics,
+          debug,
+          ...extraAppKitConfig // Spread any additional AppKit config
+        } = this._config;
+
         this.appKit = createAppKit({
           projectId: this._options.projectId as string,
           networks: [mainnet, nileTestnet, shastaTestnet],
-          themeMode: (this._config as any).themeMode,
-          themeVariables: (this._config as any).themeVariables,
-          allWallets: 'HIDE',
+          themeMode,
+          themeVariables,
+          allWallets: allWallets ?? 'HIDE',
+          featuredWalletIds,
+          includeWalletIds,
+          excludeWalletIds,
+          customWallets,
+          enableAnalytics,
+          debug,
           manualWCControl: true,
-          universalProvider: provider
-        });
-      }
+          universalProvider: provider,
+          ...extraAppKitConfig // Spread extra config options
+        } as any);
+        this.setupModalListeners();
+      } // Auto-setup modal event listeners
       this.appKit.open();
+
       try {
         const session = await provider.connect({
           pairingTopic: undefined,
@@ -242,23 +353,39 @@ export class WalletConnectWallet {
   }
 
   async disconnect() {
-    if (this._client) {
-      this.sessionHandlers.update && this._client.off('session_update', this.sessionHandlers.update);
-      this.sessionHandlers.delete && this._client.off('session_delete', this.sessionHandlers.delete);
-      this.sessionHandlers = {};
+    try {
+      // Clean up session handlers
+      if (this._client) {
+        this.sessionHandlers.update && this._client.off('session_update', this.sessionHandlers.update);
+        this.sessionHandlers.delete && this._client.off('session_delete', this.sessionHandlers.delete);
+        this.sessionHandlers = {};
+      }
+
+      // Cleanup modal listeners
+      if (this.modalStateUnsubscribe) {
+        this.modalStateUnsubscribe();
+        this.modalStateUnsubscribe = undefined;
+      }
+
+      // Cleanup event subscriptions
+      while (this.eventUnsubscribers.length > 0) {
+        const unsubscribe = this.eventUnsubscribers.shift()!;
+        unsubscribe();
+      }
+
+      const reason = getSdkError('USER_DISCONNECTED');
+      const topic = this._session?.topic || (this.provider as any)?.session?.topic;
+      if (!topic) throw new ClientNotInitializedError();
+
+      const client = (this.provider?.client as unknown as WalletConnectClient) || this._client;
+      if (!client) throw new ClientNotInitializedError();
+
+      await client.disconnect({ topic, reason } as any);
+    } finally {
+      // Always clean up session and address, even if disconnect fails
+      this._session = undefined;
+      this.address = undefined;
     }
-
-    const reason = getSdkError('USER_DISCONNECTED');
-    const topic = this._session?.topic || (this.provider as any)?.session?.topic;
-    if (!topic) throw new ClientNotInitializedError();
-
-    const client = (this.provider?.client as unknown as WalletConnectClient) || this._client;
-    if (!client) throw new ClientNotInitializedError();
-
-    await client.disconnect({ topic, reason } as any);
-
-    this._session = undefined;
-    this.address = undefined;
   }
 
   get client(): WalletConnectClient {
@@ -336,5 +463,80 @@ export class WalletConnectWallet {
     } else {
       throw new ClientNotInitializedError();
     }
+  }
+
+  // ========== AppKit Method Pass-through ==========
+  // The following methods expose AppKit functionality in manualWCControl mode.
+  // Note: AppKit instance is created during the first connect() call.
+
+  /**
+   * Close the AppKit modal.
+   * @throws {Error} If AppKit is not initialized
+   */
+  public closeModal(): void {
+    if (!this.appKit) {
+      throw new Error('[WalletConnectWallet] AppKit not initialized. Please call connect() first.');
+    }
+    this.appKit.close();
+  }
+
+  /**
+   * Set the theme mode (light or dark).
+   * @param mode - 'light' or 'dark'
+   * @throws {Error} If AppKit is not initialized
+   */
+  public setThemeMode(mode: 'light' | 'dark'): void {
+    if (!this.appKit) {
+      throw new Error('[WalletConnectWallet] AppKit not initialized. Please call connect() first.');
+    }
+    this.appKit.setThemeMode(mode);
+  }
+
+  /**
+   * Subscribe to AppKit modal state changes.
+   * @param callback - Callback function called when state changes
+   * @returns Unsubscribe function
+   * @note Can be called before connect(). Subscription will be active after AppKit is initialized.
+   */
+  public subscribeModalState(callback: (state: any) => void): () => void {
+    if (!this.appKit) {
+      // AppKit not created yet, cache the callback function
+      this.pendingModalCallbacks.push(callback);
+      // Return cleanup function
+      return () => {
+        const index = this.pendingModalCallbacks.indexOf(callback);
+        if (index > -1) {
+          this.pendingModalCallbacks.splice(index, 1);
+        }
+      };
+    }
+    const unsubscribe = this.appKit.subscribeState(callback);
+    if (!this.modalStateUnsubscribe) {
+      this.modalStateUnsubscribe = unsubscribe;
+    }
+    return unsubscribe;
+  }
+
+  /**
+   * Subscribe to all AppKit events.
+   * @param callback - Callback function called on each event
+   * @returns Unsubscribe function
+   * @note Can be called before connect(). Subscription will be active after AppKit is initialized.
+   */
+  public subscribeEvents(callback: (event: any) => void): () => void {
+    if (!this.appKit) {
+      // AppKit not created yet, cache the callback function
+      this.pendingEventCallbacks.push(callback);
+      // Return cleanup function
+      return () => {
+        const index = this.pendingEventCallbacks.indexOf(callback);
+        if (index > -1) {
+          this.pendingEventCallbacks.splice(index, 1);
+        }
+      };
+    }
+    const unsubscribe = this.appKit.subscribeEvents(callback);
+    this.eventUnsubscribers.push(unsubscribe);
+    return unsubscribe;
   }
 }

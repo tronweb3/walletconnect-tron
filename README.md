@@ -2,7 +2,7 @@
 
 `@tronweb3/walletconnect-tron` helps dApps connect to the TRON network via WalletConnect.
 
-# Get Started
+## Get Started
 
 ### Installation
 
@@ -20,7 +20,7 @@ yarn add @tronweb3/walletconnect-tron
 pnpm add @tronweb3/walletconnect-tron
 ```
 
-# Create a WalletConnect wallet
+## Create a WalletConnect wallet
 
 ### Request Parameters
 
@@ -75,7 +75,7 @@ const wallet = new WalletConnectWallet({
 });
 ```
 
-# Connect to the Wallet
+## Connect to the Wallet
 
 Use `wallet.connect()` to establish a connection. If the dApp has previously connected, it will reconnect automatically; otherwise, a WalletConnect QR code will be displayed.
 
@@ -89,7 +89,7 @@ Returns an object containing the wallet address when connected (e.g., `{ address
 const { address } = await wallet.connect();
 ```
 
-# Disconnect from the Wallet
+## Disconnect from the Wallet
 
 Use `wallet.disconnect()` to disconnect the wallet.
 
@@ -103,7 +103,7 @@ try {
 }
 ```
 
-# Sign Transaction
+## Sign Transaction
 
 Signs the provided transaction object.
 
@@ -173,7 +173,7 @@ const signedTransaction = await wallet.signTransaction(transaction);
 - `sendTrx` returns the transaction object directly; pass it to `wallet.signTransaction`.
 - Some wallets auto-broadcast, others do not. If not, call `tronWeb.trx.sendRawTransaction(signedTransaction)` yourself.
 
-# Sign Message
+## Sign Message
 
 Signs a string message.
 
@@ -193,7 +193,7 @@ try {
 }
 ```
 
-# Check Connection Status
+## Check Connection Status
 
 Checks the connection status.
 
@@ -207,17 +207,17 @@ Returns `{ address: string }`. If not connected, returns `{ address: '' }`.
 const { address } = await wallet.checkConnectStatus();
 ```
 
-# Event Listeners
+## Event Listeners
 
 The wallet supports event listeners to monitor connection state and account changes.
 
 **Note:** The `on()` method returns a function that can be called to unsubscribe from the event. This is why the returned value is typically named `unsubscribe`.
 
-## accountsChanged Event
+### accountsChanged Event
 
 Triggered when the connected account address changes (e.g., user switches accounts in the wallet).
 
-### Parameters
+#### Parameters
 
 | Parameter | Description                | Type     |
 | --------- | -------------------------- | -------- |
@@ -225,7 +225,7 @@ Triggered when the connected account address changes (e.g., user switches accoun
 
 The first address in the array is the primary account address.
 
-### Example
+#### Example
 
 ```javascript
 // on() returns a function that can be called to unsubscribe
@@ -239,11 +239,11 @@ const unsubscribe = wallet.on('accountsChanged', accounts => {
 unsubscribe();
 ```
 
-## disconnect Event
+### disconnect Event
 
 Triggered when the wallet connection is disconnected (either by user action or network issues).
 
-### Example
+#### Example
 
 ```javascript
 // on() returns a function that can be called to unsubscribe
@@ -256,7 +256,7 @@ const unsubscribe = wallet.on('disconnect', () => {
 unsubscribe();
 ```
 
-## Remove Event Listeners
+### Remove Event Listeners
 
 Recommended: use the unsubscribe function returned by `on()`. To remove a specific listener with `off()`, pass the same function reference:
 
@@ -275,6 +275,135 @@ wallet.off('accountsChanged', fn);
 wallet.removeAllListeners('accountsChanged');
 // wallet.removeAllListeners();
 ```
+
+## AppKit Control Methods
+
+The SDK exposes AppKit control methods for advanced use cases. These methods allow you to control the AppKit modal and subscribe to its state changes.
+
+**Note:** AppKit is initialized during the first `connect()` call. Most methods require AppKit to be initialized first.
+
+### closeModal()
+
+Programmatically close the AppKit modal.
+
+#### Example
+
+```javascript
+// Close the modal programmatically
+wallet.closeModal();
+```
+
+#### Use Cases
+
+- Auto-close modal after a timeout
+- Close modal based on custom business logic
+- Integrate with your own UI flow
+
+### setThemeMode()
+
+Dynamically change the AppKit theme mode after initialization.
+
+#### Parameters
+
+| Parameter | Description       | Type                      |
+| --------- | ----------------- | ------------------------- |
+| mode      | Theme mode to set | `'light'` &#124; `'dark'` |
+
+#### Example
+
+```javascript
+// Switch to light theme
+wallet.setThemeMode('light');
+
+// Switch to dark theme
+wallet.setThemeMode('dark');
+```
+
+**Note:** This method can be called after `connect()` to dynamically change the theme. The initial theme is set via the `themeMode` config option when creating the wallet instance.
+
+### subscribeModalState()
+
+Subscribe to AppKit modal state changes (e.g., modal open/close events).
+
+#### Parameters
+
+| Parameter | Description                      | Type       |
+| --------- | -------------------------------- | ---------- |
+| callback  | Function called on state changes | `Function` |
+
+#### Returns
+
+Returns an unsubscribe function that can be called to stop receiving updates.
+
+#### Example
+
+```javascript
+// Subscribe to modal state changes
+const unsubscribe = wallet.subscribeModalState(state => {
+  console.log('Modal open:', state.open);
+  console.log('Selected network:', state.selectedNetworkId);
+
+  if (state.open) {
+    console.log('Modal opened');
+  } else {
+    console.log('Modal closed');
+  }
+});
+
+// Later: unsubscribe when done
+unsubscribe();
+```
+
+**Note:** This method can be called before `connect()`. The subscription will become active after AppKit is initialized.
+
+### subscribeEvents()
+
+Subscribe to all AppKit events for analytics and tracking purposes.
+
+#### Parameters
+
+| Parameter | Description                   | Type       |
+| --------- | ----------------------------- | ---------- |
+| callback  | Function called on each event | `Function` |
+
+#### Returns
+
+Returns an unsubscribe function that can be called to stop receiving events.
+
+#### Example
+
+```javascript
+// Subscribe to all AppKit events
+const unsubscribe = wallet.subscribeEvents(event => {
+  const { data } = event;
+  if (data) {
+    console.log('Event type:', data.event);
+    console.log('Event data:', data.properties);
+
+    // Track specific events
+    if (data.event === 'MODAL_OPEN') {
+      console.log('User opened wallet selection modal');
+    } else if (data.event === 'MODAL_CLOSE') {
+      console.log('User closed wallet selection modal');
+    } else if (data.event === 'CONNECT_SUCCESS') {
+      console.log('User successfully connected wallet');
+    }
+  }
+});
+
+// Later: unsubscribe when done
+unsubscribe();
+```
+
+#### Common Events
+
+- `MODAL_OPEN` - Modal opened
+- `MODAL_CLOSE` - Modal closed
+- `SELECT_WALLET` - User selected a wallet
+- `CONNECT_SUCCESS` - Connection successful
+- `CONNECT_ERROR` - Connection failed
+
+**Note:** This method can be called before `connect()`. The subscription will become active after AppKit is initialized.
 
 ## Note
 
