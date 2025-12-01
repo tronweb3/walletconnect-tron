@@ -290,7 +290,7 @@ Programmatically close the AppKit modal.
 
 ```javascript
 // Close the modal programmatically
-wallet.closeModal();
+await wallet.closeModal();
 ```
 
 #### Use Cases

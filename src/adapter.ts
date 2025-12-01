@@ -1,4 +1,5 @@
 import { AppKit, createAppKit } from '@reown/appkit';
+import type { PublicStateControllerState, EventsControllerState } from '@reown/appkit';
 import type WalletConnectClient from '@walletconnect/sign-client';
 import { UniversalProvider } from '@walletconnect/universal-provider';
 import type { EngineTypes, SessionTypes, SignClientTypes } from '@walletconnect/types';
@@ -105,8 +106,8 @@ export class WalletConnectWallet {
   private eventUnsubscribers: Array<() => void> = [];
 
   // Cache subscription requests before AppKit is created
-  private pendingModalCallbacks: Array<(state: any) => void> = [];
-  private pendingEventCallbacks: Array<(event: any) => void> = [];
+  private pendingModalCallbacks: Array<(state: PublicStateControllerState) => void> = [];
+  private pendingEventCallbacks: Array<(event: EventsControllerState) => void> = [];
 
   constructor(config: WalletConnectAdapterConfig) {
     this._options = config.options;
@@ -332,7 +333,7 @@ export class WalletConnectWallet {
         } as any);
         this.setupModalListeners();
       } // Auto-setup modal event listeners
-      this.appKit.open();
+      await this.appKit.open();
 
       try {
         const session = await provider.connect({
@@ -347,7 +348,7 @@ export class WalletConnectWallet {
         this.emit('accountsChanged', addresses);
         return { address: this.address };
       } finally {
-        this.appKit?.close();
+        await this.appKit?.close();
       }
     }
   }
@@ -473,11 +474,11 @@ export class WalletConnectWallet {
    * Close the AppKit modal.
    * @throws {Error} If AppKit is not initialized
    */
-  public closeModal(): void {
+  public async closeModal(): Promise<void> {
     if (!this.appKit) {
       throw new Error('[WalletConnectWallet] AppKit not initialized. Please call connect() first.');
     }
-    this.appKit.close();
+    await this.appKit.close();
   }
 
   /**
@@ -498,7 +499,7 @@ export class WalletConnectWallet {
    * @returns Unsubscribe function
    * @note Can be called before connect(). Subscription will be active after AppKit is initialized.
    */
-  public subscribeModalState(callback: (state: any) => void): () => void {
+  public subscribeModalState(callback: (state: PublicStateControllerState) => void): () => void {
     if (!this.appKit) {
       // AppKit not created yet, cache the callback function
       this.pendingModalCallbacks.push(callback);
@@ -523,7 +524,7 @@ export class WalletConnectWallet {
    * @returns Unsubscribe function
    * @note Can be called before connect(). Subscription will be active after AppKit is initialized.
    */
-  public subscribeEvents(callback: (event: any) => void): () => void {
+  public subscribeEvents(callback: (event: EventsControllerState) => void): () => void {
     if (!this.appKit) {
       // AppKit not created yet, cache the callback function
       this.pendingEventCallbacks.push(callback);
