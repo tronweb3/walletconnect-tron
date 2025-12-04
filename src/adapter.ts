@@ -57,12 +57,6 @@ export interface WalletConnectAdapterConfig {
    */
   debug?: boolean;
   /**
-   * Enable mobile deep linking optimization.
-   * When enabled, automatically configures mobile wallet IDs and settings for better deep linking support.
-   * @default true
-   */
-  enableMobileDeepLink?: boolean;
-  /**
    * Additional AppKit configuration options.
    * Any extra properties will be passed directly to createAppKit.
    */
