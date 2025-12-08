@@ -5,7 +5,15 @@ import { UniversalProvider } from '@walletconnect/universal-provider';
 import type { EngineTypes, SessionTypes, SignClientTypes } from '@walletconnect/types';
 import { getSdkError } from '@walletconnect/utils';
 import { ClientNotInitializedError } from './errors.js';
-import { ChainID, mainnet, nileTestnet, shastaTestnet, ThemeVariables } from './utils.js';
+import {
+  ChainID,
+  WalletConnectChainID,
+  mainnet,
+  nileTestnet,
+  shastaTestnet,
+  NETWORK_MAP,
+  ThemeVariables
+} from './utils.js';
 
 export interface WalletConnectAdapterConfig {
   network: ChainID;
@@ -309,9 +317,12 @@ export class WalletConnectWallet {
           ...extraAppKitConfig // Spread any additional AppKit config
         } = this._config;
 
+        const selectedNetwork = NETWORK_MAP.get(this._network as WalletConnectChainID) || mainnet;
+
         this.appKit = createAppKit({
           projectId: this._options.projectId as string,
           networks: [mainnet, nileTestnet, shastaTestnet],
+          defaultNetwork: selectedNetwork,
           themeMode,
           themeVariables,
           allWallets: allWallets ?? 'HIDE',

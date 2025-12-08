@@ -75,6 +75,12 @@ export const shastaTestnet: AppKitNetwork = defineChain({
   contracts: {}
 });
 
+export const NETWORK_MAP = new Map<WalletConnectChainID, AppKitNetwork>([
+  [WalletConnectChainID.Mainnet, mainnet],
+  [WalletConnectChainID.Nile, nileTestnet],
+  [WalletConnectChainID.Shasta, shastaTestnet]
+]);
+
 export interface ThemeVariables {
   /**
    * Base font family.
