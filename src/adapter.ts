@@ -104,12 +104,18 @@ export class WalletConnectWallet {
   private address: string | undefined;
   private eventListeners = new Map<string, Set<Function>>();
   private sessionHandlers: { update?: (args: any) => void; delete?: (args: any) => void } = {};
-  private modalStateUnsubscribe: (() => void) | undefined;
+  private modalStateUnsubscribers: Array<() => void> = [];
   private eventUnsubscribers: Array<() => void> = [];
 
   // Cache subscription requests before AppKit is created
-  private pendingModalCallbacks: Array<(state: PublicStateControllerState) => void> = [];
-  private pendingEventCallbacks: Array<(event: EventsControllerState) => void> = [];
+  private pendingModalCallbacks: Array<{
+    callback: (state: PublicStateControllerState) => void;
+    unsubscribeRef: { fn?: () => void };
+  }> = [];
+  private pendingEventCallbacks: Array<{
+    callback: (event: EventsControllerState) => void;
+    unsubscribeRef: { fn?: () => void };
+  }> = [];
 
   constructor(config: WalletConnectAdapterConfig) {
     this._options = config.options;
@@ -252,10 +258,10 @@ export class WalletConnectWallet {
   private setupModalListeners(): void {
     if (!this.appKit) return;
 
-    // Clean up existing subscription
-    if (this.modalStateUnsubscribe) {
-      this.modalStateUnsubscribe();
-      this.modalStateUnsubscribe = undefined;
+    // Clean up existing subscriptions
+    while (this.modalStateUnsubscribers.length > 0) {
+      const unsubscribe = this.modalStateUnsubscribers.shift()!;
+      unsubscribe();
     }
 
     // Clean up existing event subscriptions
@@ -266,18 +272,20 @@ export class WalletConnectWallet {
 
     // Process cached modal state subscriptions
     while (this.pendingModalCallbacks.length > 0) {
-      const callback = this.pendingModalCallbacks.shift()!;
-      const unsubscribe = this.appKit.subscribeState(callback);
-      if (!this.modalStateUnsubscribe) {
-        this.modalStateUnsubscribe = unsubscribe;
-      }
+      const item = this.pendingModalCallbacks.shift()!;
+      const unsubscribe = this.appKit.subscribeState(item.callback);
+      this.modalStateUnsubscribers.push(unsubscribe);
+      // Wire up the user's unsubscribe reference
+      item.unsubscribeRef.fn = unsubscribe;
     }
 
     // Process cached event subscriptions
     while (this.pendingEventCallbacks.length > 0) {
-      const callback = this.pendingEventCallbacks.shift()!;
-      const unsubscribe = this.appKit.subscribeEvents(callback);
+      const item = this.pendingEventCallbacks.shift()!;
+      const unsubscribe = this.appKit.subscribeEvents(item.callback);
       this.eventUnsubscribers.push(unsubscribe);
+      // Wire up the user's unsubscribe reference
+      item.unsubscribeRef.fn = unsubscribe;
     }
   }
 
@@ -317,7 +325,7 @@ export class WalletConnectWallet {
           ...extraAppKitConfig // Spread any additional AppKit config
         } = this._config;
 
-        const selectedNetwork = NETWORK_MAP.get(this._network as WalletConnectChainID) || mainnet;
+        const selectedNetwork = NETWORK_MAP.get(this._network as WalletConnectChainID);
 
         this.appKit = createAppKit({
           projectId: this._options.projectId as string,
@@ -341,10 +349,41 @@ export class WalletConnectWallet {
       await this.appKit.open();
 
       try {
-        const session = await provider.connect({
+        let isConnected = false;
+        let modalStateUnsubscribe: (() => void) | undefined;
+
+        // Monitor modal close to abort connection if user closes it
+        const connectPromise = provider.connect({
           pairingTopic: undefined,
           optionalNamespaces: (getConnectParams(this._network) as any).requiredNamespaces as any
         } as any);
+
+        // Create a promise that rejects when modal is closed by user (before connection completes)
+        const modalClosePromise = new Promise<never>((_, reject) => {
+          let isModalOpen = true;
+          modalStateUnsubscribe = this.appKit!.subscribeState(state => {
+            // Detect modal closing before connection is established
+            if (isModalOpen && !state.open && !isConnected) {
+              // Don't delete proposals - just reject to inform dApp
+              // If wallet confirms later, it will still work through session events
+              reject(new Error('User closed the connection modal'));
+            }
+            isModalOpen = state.open;
+          });
+        });
+
+        // Race between connection completing and modal being closed
+        const session = await Promise.race([
+          connectPromise.then(result => {
+            isConnected = true; // Mark connection as successful
+            return result;
+          }),
+          modalClosePromise
+        ]).finally(() => {
+          // Clean up modal state subscription
+          modalStateUnsubscribe?.();
+        });
+
         this._session = session as SessionTypes.Struct;
         this._client = client;
         this.address = this.extractAddressFromSession(this._session);
@@ -352,6 +391,8 @@ export class WalletConnectWallet {
         const addresses = this.extractAllAddressesFromSession(this._session);
         this.emit('accountsChanged', addresses);
         return { address: this.address };
+      } catch (error) {
+        throw error;
       } finally {
         await this.appKit?.close();
       }
@@ -368,9 +409,9 @@ export class WalletConnectWallet {
       }
 
       // Cleanup modal listeners
-      if (this.modalStateUnsubscribe) {
-        this.modalStateUnsubscribe();
-        this.modalStateUnsubscribe = undefined;
+      while (this.modalStateUnsubscribers.length > 0) {
+        const unsubscribe = this.modalStateUnsubscribers.shift()!;
+        unsubscribe();
       }
 
       // Cleanup event subscriptions
@@ -506,21 +547,41 @@ export class WalletConnectWallet {
    */
   public subscribeModalState(callback: (state: PublicStateControllerState) => void): () => void {
     if (!this.appKit) {
-      // AppKit not created yet, cache the callback function
-      this.pendingModalCallbacks.push(callback);
-      // Return cleanup function
+      // AppKit not created yet, cache the callback with an unsubscribe reference
+      const unsubscribeRef: { fn?: () => void } = {};
+      const item = { callback, unsubscribeRef };
+      this.pendingModalCallbacks.push(item);
+
+      // Return cleanup function that works both before and after AppKit initialization
       return () => {
-        const index = this.pendingModalCallbacks.indexOf(callback);
-        if (index > -1) {
-          this.pendingModalCallbacks.splice(index, 1);
+        if (unsubscribeRef.fn) {
+          // AppKit already initialized, call the real unsubscribe
+          unsubscribeRef.fn();
+          // Remove from array
+          const index = this.modalStateUnsubscribers.indexOf(unsubscribeRef.fn);
+          if (index > -1) {
+            this.modalStateUnsubscribers.splice(index, 1);
+          }
+        } else {
+          // AppKit not yet initialized, remove from pending
+          const index = this.pendingModalCallbacks.indexOf(item);
+          if (index > -1) {
+            this.pendingModalCallbacks.splice(index, 1);
+          }
         }
       };
     }
+
+    // AppKit already exists, subscribe immediately
     const unsubscribe = this.appKit.subscribeState(callback);
-    if (!this.modalStateUnsubscribe) {
-      this.modalStateUnsubscribe = unsubscribe;
-    }
-    return unsubscribe;
+    this.modalStateUnsubscribers.push(unsubscribe);
+    return () => {
+      unsubscribe();
+      const index = this.modalStateUnsubscribers.indexOf(unsubscribe);
+      if (index > -1) {
+        this.modalStateUnsubscribers.splice(index, 1);
+      }
+    };
   }
 
   /**
@@ -531,18 +592,40 @@ export class WalletConnectWallet {
    */
   public subscribeEvents(callback: (event: EventsControllerState) => void): () => void {
     if (!this.appKit) {
-      // AppKit not created yet, cache the callback function
-      this.pendingEventCallbacks.push(callback);
-      // Return cleanup function
+      // AppKit not created yet, cache the callback with an unsubscribe reference
+      const unsubscribeRef: { fn?: () => void } = {};
+      const item = { callback, unsubscribeRef };
+      this.pendingEventCallbacks.push(item);
+
+      // Return cleanup function that works both before and after AppKit initialization
       return () => {
-        const index = this.pendingEventCallbacks.indexOf(callback);
-        if (index > -1) {
-          this.pendingEventCallbacks.splice(index, 1);
+        if (unsubscribeRef.fn) {
+          // AppKit already initialized, call the real unsubscribe
+          unsubscribeRef.fn();
+          // Remove from array
+          const index = this.eventUnsubscribers.indexOf(unsubscribeRef.fn);
+          if (index > -1) {
+            this.eventUnsubscribers.splice(index, 1);
+          }
+        } else {
+          // AppKit not yet initialized, remove from pending
+          const index = this.pendingEventCallbacks.indexOf(item);
+          if (index > -1) {
+            this.pendingEventCallbacks.splice(index, 1);
+          }
         }
       };
     }
+
+    // AppKit already exists, subscribe immediately
     const unsubscribe = this.appKit.subscribeEvents(callback);
     this.eventUnsubscribers.push(unsubscribe);
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      const index = this.eventUnsubscribers.indexOf(unsubscribe);
+      if (index > -1) {
+        this.eventUnsubscribers.splice(index, 1);
+      }
+    };
   }
 }
