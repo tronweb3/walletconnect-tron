@@ -1,3 +1,9 @@
+## 4.0.1
+
+- Add AppKit control methods: `closeModal()`, `setThemeMode()`, `subscribeModalState()`, and `subscribeEvents()`.
+- Support dynamic theme mode switching after connection.
+- Add modal state and event tracking capabilities.
+
 ## 4.0.0
 
 - Update QR code modal from `@walletconnect/modal` to `@reown/appkit`.
