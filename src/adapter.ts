@@ -80,6 +80,20 @@ interface WalletConnectWalletInit {
   address: string;
 }
 
+export interface ConnectOptions {
+  /**
+   * If true, skip the AppKit modal and return the URI for custom QR code rendering.
+   * Use this when you want to display your own QR code UI.
+   * @default false
+   */
+  skipModal?: boolean;
+  /**
+   * Callback to receive the WalletConnect URI for custom QR code rendering.
+   * Only called when skipModal is true.
+   */
+  onUri?: (uri: string) => void;
+}
+
 const getConnectParams = (chainId: ChainID, pairingTopic?: string) =>
   ({
     requiredNamespaces: {
@@ -289,7 +303,8 @@ export class WalletConnectWallet {
     }
   }
 
-  async connect(): Promise<WalletConnectWalletInit> {
+  async connect(options?: ConnectOptions): Promise<WalletConnectWalletInit> {
+    const { skipModal = false, onUri } = options || {};
     const provider = await this.getProvider();
     const client = provider.client as unknown as WalletConnectClient;
 
@@ -308,11 +323,15 @@ export class WalletConnectWallet {
         address: this.address
       };
     } else {
+      // skipModal mode: return URI for custom QR code rendering
+      if (skipModal) {
+        return this.connectWithUri(onUri);
+      }
+
       if (!this.appKit) {
         // Extract known configuration properties
         const {
           network,
-          options,
           themeMode,
           themeVariables,
           allWallets,
@@ -396,6 +415,42 @@ export class WalletConnectWallet {
       } finally {
         await this.appKit?.close();
       }
+    }
+  }
+
+  /**
+   * Connect without AppKit modal - returns URI for custom QR code rendering.
+   * @internal
+   */
+  private async connectWithUri(onUri?: (uri: string) => void): Promise<WalletConnectWalletInit> {
+    const provider = await this.getProvider();
+    const client = provider.client as unknown as WalletConnectClient;
+
+    // Listen for URI event
+    if (onUri) {
+      provider.once('display_uri', onUri);
+    }
+
+    try {
+      const session = await provider.connect({
+        pairingTopic: undefined,
+        optionalNamespaces: (getConnectParams(this._network) as any).requiredNamespaces as any
+      } as any);
+
+      this._session = session as SessionTypes.Struct;
+      this._client = client;
+      this.address = this.extractAddressFromSession(this._session);
+      this.setupSessionListeners();
+      const addresses = this.extractAllAddressesFromSession(this._session);
+      this.emit('accountsChanged', addresses);
+
+      return { address: this.address };
+    } catch (error) {
+      // Clean up listener if connection fails
+      if (onUri) {
+        provider.off('display_uri', onUri);
+      }
+      throw error;
     }
   }
 
