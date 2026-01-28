@@ -1,6 +1,6 @@
 {
   "name": "@tronweb3/walletconnect-tron",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Helps dApps connect to the TRON network via WalletConnect.",
   "keywords": [
     "tron",
