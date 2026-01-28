@@ -82,14 +82,8 @@ interface WalletConnectWalletInit {
 
 export interface ConnectOptions {
   /**
-   * If true, skip the AppKit modal and return the URI for custom QR code rendering.
-   * Use this when you want to display your own QR code UI.
-   * @default false
-   */
-  skipModal?: boolean;
-  /**
    * Callback to receive the WalletConnect URI for custom QR code rendering.
-   * Only called when skipModal is true.
+   * When provided, the AppKit modal will be skipped.
    */
   onUri?: (uri: string) => void;
 }
@@ -304,7 +298,7 @@ export class WalletConnectWallet {
   }
 
   async connect(options?: ConnectOptions): Promise<WalletConnectWalletInit> {
-    const { skipModal = false, onUri } = options || {};
+    const { onUri } = options || {};
     const provider = await this.getProvider();
     const client = provider.client as unknown as WalletConnectClient;
 
@@ -323,8 +317,8 @@ export class WalletConnectWallet {
         address: this.address
       };
     } else {
-      // skipModal mode: return URI for custom QR code rendering
-      if (skipModal) {
+      // Custom QR code mode: return URI for custom rendering
+      if (onUri) {
         return this.connectWithUri(onUri);
       }
 
@@ -422,14 +416,12 @@ export class WalletConnectWallet {
    * Connect without AppKit modal - returns URI for custom QR code rendering.
    * @internal
    */
-  private async connectWithUri(onUri?: (uri: string) => void): Promise<WalletConnectWalletInit> {
+  private async connectWithUri(onUri: (uri: string) => void): Promise<WalletConnectWalletInit> {
     const provider = await this.getProvider();
     const client = provider.client as unknown as WalletConnectClient;
 
     // Listen for URI event
-    if (onUri) {
-      provider.once('display_uri', onUri);
-    }
+    provider.once('display_uri', onUri);
 
     try {
       const session = await provider.connect({
@@ -447,9 +439,7 @@ export class WalletConnectWallet {
       return { address: this.address };
     } catch (error) {
       // Clean up listener if connection fails
-      if (onUri) {
-        provider.off('display_uri', onUri);
-      }
+      provider.off('display_uri', onUri);
       throw error;
     }
   }
