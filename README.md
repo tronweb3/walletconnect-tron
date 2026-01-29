@@ -89,6 +89,37 @@ Returns an object containing the wallet address when connected (e.g., `{ address
 const { address } = await wallet.connect();
 ```
 
+### Custom QR Code Rendering
+
+If you want to use your own UI to display the QR code, you can provide an `onUri` callback to receive the WalletConnect URI. When `onUri` is provided, the AppKit modal will be automatically skipped.
+
+#### Parameters
+
+| Parameter | Description                                      | Type       |
+| --------- | ------------------------------------------------ | ---------- |
+| onUri     | Callback to receive the WalletConnect URI string | `Function` |
+
+#### Example
+
+```javascript
+const { address } = await wallet.connect({
+  onUri: (uri) => {
+    console.log('WalletConnect URI:', uri);
+    // Display the QR code using your own UI
+    // For example, using the qrcode library:
+    // import QRCode from 'qrcode';
+    // QRCode.toCanvas(document.getElementById('canvas'), uri);
+  }
+});
+```
+
+#### Use Cases
+
+- Implement custom QR code styling and branding
+- Display QR codes in mobile apps or custom web interfaces
+- Integrate with existing UI frameworks or design systems
+- Add custom loading states or error handling around QR code display
+
 ## Disconnect from the Wallet
 
 Use `wallet.disconnect()` to disconnect the wallet.
