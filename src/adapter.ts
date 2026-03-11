@@ -80,6 +80,14 @@ interface WalletConnectWalletInit {
   address: string;
 }
 
+export interface ConnectOptions {
+  /**
+   * Callback to receive the WalletConnect URI for custom QR code rendering.
+   * When provided, the AppKit modal will be skipped.
+   */
+  onUri?: (uri: string) => void;
+}
+
 const getConnectParams = (chainId: ChainID, pairingTopic?: string) =>
   ({
     requiredNamespaces: {
@@ -289,7 +297,8 @@ export class WalletConnectWallet {
     }
   }
 
-  async connect(): Promise<WalletConnectWalletInit> {
+  async connect(options?: ConnectOptions): Promise<WalletConnectWalletInit> {
+    const { onUri } = options || {};
     const provider = await this.getProvider();
     const client = provider.client as unknown as WalletConnectClient;
 
@@ -308,11 +317,15 @@ export class WalletConnectWallet {
         address: this.address
       };
     } else {
+      // Custom QR code mode: return URI for custom rendering
+      if (onUri) {
+        return this.connectWithUri(onUri);
+      }
+
       if (!this.appKit) {
         // Extract known configuration properties
         const {
           network,
-          options,
           themeMode,
           themeVariables,
           allWallets,
@@ -396,6 +409,38 @@ export class WalletConnectWallet {
       } finally {
         await this.appKit?.close();
       }
+    }
+  }
+
+  /**
+   * Connect without AppKit modal - returns URI for custom QR code rendering.
+   * @internal
+   */
+  private async connectWithUri(onUri: (uri: string) => void): Promise<WalletConnectWalletInit> {
+    const provider = await this.getProvider();
+    const client = provider.client as unknown as WalletConnectClient;
+
+    // Listen for URI event
+    provider.once('display_uri', onUri);
+
+    try {
+      const session = await provider.connect({
+        pairingTopic: undefined,
+        optionalNamespaces: (getConnectParams(this._network) as any).requiredNamespaces as any
+      } as any);
+
+      this._session = session as SessionTypes.Struct;
+      this._client = client;
+      this.address = this.extractAddressFromSession(this._session);
+      this.setupSessionListeners();
+      const addresses = this.extractAllAddressesFromSession(this._session);
+      this.emit('accountsChanged', addresses);
+
+      return { address: this.address };
+    } catch (error) {
+      // Clean up listener if connection fails
+      provider.off('display_uri', onUri);
+      throw error;
     }
   }
 

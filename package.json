@@ -1,6 +1,6 @@
 {
   "name": "@tronweb3/walletconnect-tron",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Helps dApps connect to the TRON network via WalletConnect.",
   "keywords": [
     "tron",
@@ -44,6 +44,14 @@
     "fmt": "prettier --write '{*,**/*}.{ts,tsx,js,jsx,json}'",
     "lint": "prettier --check '{*,**/*}.{ts,tsx,js,jsx,json}' && eslint .",
     "lint:fix": "pnpm run fmt && eslint --fix ."
+  },
+  "pnpm": {
+    "overrides": {
+      "h3": "^1.15.5",
+      "minimatch": ">=3.1.4",
+      "js-yaml": ">=4.1.1",
+      "ajv": ">=6.14.0"
+    }
   },
   "devDependencies": {
     "@types/node": "18.16.14",
