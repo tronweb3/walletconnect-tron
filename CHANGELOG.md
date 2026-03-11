@@ -1,3 +1,8 @@
+## 4.0.2
+
+- Add custom QR code rendering support via `onUri` callback in `connect()` options.
+- When `onUri` is provided, the AppKit modal is automatically skipped, allowing developers to implement their own QR code UI.
+
 ## 4.0.1
 
 - Add AppKit control methods: `closeModal()`, `setThemeMode()`, `subscribeModalState()`, and `subscribeEvents()`.
