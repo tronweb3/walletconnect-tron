@@ -1,0 +1,13 @@
+.github
+.claude
+.eslintignore
+.next
+.prettierignore
+.parcel-cache
+.swc
+
+docs
+lib
+build
+dist
+out
