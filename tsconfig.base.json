@@ -1,15 +1,24 @@
 {
-    "include": [],
-    "compilerOptions": {
-        "target": "ESNext",
-        "module": "ESNext",
-        "moduleResolution": "Node",
-        "esModuleInterop": true,
-        "isolatedModules": true,
-        "noEmitOnError": true,
-        "resolveJsonModule": true,
-        "strict": true,
-        "stripInternal": true,
-        "skipLibCheck": true
+  "include": [],
+  "exclude": ["./lib"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM"],
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "noEmitOnError": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "stripInternal": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "ox": ["node_modules/ox/_types/index.d.ts"],
+      "ox/tempo": ["node_modules/ox/_types/tempo/index.d.ts"],
+      "ox/tempo/*": ["node_modules/ox/_types/tempo/*.d.ts"],
+      "ox/*": ["node_modules/ox/_types/core/*.d.ts"]
     }
+  }
 }

@@ -1,3 +1,9 @@
+## 4.0.3
+
+- Add ESLint, Prettier, and GitHub Actions CI for code quality
+- Upgrade dependencies: `@reown/appkit` to 1.8.20, `@walletconnect/*` to 2.23.9
+- Fix security vulnerabilities in transitive dependencies including `h3` and `picomatch`
+
 ## 4.0.2
 
 - Add custom QR code rendering support via `onUri` callback in `connect()` options.
