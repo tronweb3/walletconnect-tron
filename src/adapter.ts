@@ -80,6 +80,8 @@ interface WalletConnectWalletInit {
   address: string;
 }
 
+type WalletConnectEventListener = (...args: any[]) => void;
+
 export interface ConnectOptions {
   /**
    * Callback to receive the WalletConnect URI for custom QR code rendering.
@@ -98,7 +100,7 @@ const getConnectParams = (chainId: ChainID, pairingTopic?: string) =>
       }
     },
     pairingTopic: pairingTopic
-  } as unknown as Required<EngineTypes.ConnectParams>);
+  }) as unknown as Required<EngineTypes.ConnectParams>;
 
 export class WalletConnectWallet {
   private _client: WalletConnectClient | undefined;
@@ -110,7 +112,7 @@ export class WalletConnectWallet {
   private provider: InstanceType<typeof UniversalProvider> | undefined;
   private providerPromise: Promise<InstanceType<typeof UniversalProvider>> | null = null;
   private address: string | undefined;
-  private eventListeners = new Map<string, Set<Function>>();
+  private eventListeners = new Map<string, Set<WalletConnectEventListener>>();
   private sessionHandlers: { update?: (args: any) => void; delete?: (args: any) => void } = {};
   private modalStateUnsubscribers: Array<() => void> = [];
   private eventUnsubscribers: Array<() => void> = [];
@@ -195,7 +197,7 @@ export class WalletConnectWallet {
 
   on(event: 'accountsChanged', listener: (accounts: string[]) => void): () => void;
   on(event: 'disconnect', listener: () => void): () => void;
-  on(event: string, listener: Function): () => void {
+  on(event: string, listener: WalletConnectEventListener): () => void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, new Set());
     }
@@ -203,7 +205,7 @@ export class WalletConnectWallet {
     return () => this.off(event, listener);
   }
 
-  off(event: string, listener: Function): void {
+  off(event: string, listener: WalletConnectEventListener): void {
     this.eventListeners.get(event)?.delete(listener);
   }
 
@@ -325,7 +327,7 @@ export class WalletConnectWallet {
       if (!this.appKit) {
         // Extract known configuration properties
         const {
-          network,
+          network: _network,
           themeMode,
           themeVariables,
           allWallets,
@@ -404,8 +406,6 @@ export class WalletConnectWallet {
         const addresses = this.extractAllAddressesFromSession(this._session);
         this.emit('accountsChanged', addresses);
         return { address: this.address };
-      } catch (error) {
-        throw error;
       } finally {
         await this.appKit?.close();
       }
