@@ -1,6 +1,6 @@
 {
   "name": "@tronweb3/walletconnect-tron",
-  "version": "4.0.3",
+  "version": "4.0.4",
   "description": "Helps dApps connect to the TRON network via WalletConnect.",
   "keywords": [
     "tron",
@@ -43,12 +43,14 @@
     "release": "pnpm run clean && pnpm run build && pnpm run package",
     "fmt": "prettier --write '{*,**/*}.{ts,tsx,js,jsx,json}'",
     "lint": "prettier --check '{*,**/*}.{ts,tsx,js,jsx,json}' && eslint .",
-    "lint:fix": "pnpm run fmt && eslint --fix ."
+    "lint:fix": "pnpm run fmt && eslint --fix .",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "18.16.14",
     "@typescript-eslint/eslint-plugin": "5.62.0",
     "@typescript-eslint/parser": "5.62.0",
+    "@walletconnect/types": "2.23.9",
     "eslint": "8.57.1",
     "eslint-config-prettier": "9.1.0",
     "eslint-plugin-prettier": "5.2.1",
@@ -57,12 +59,12 @@
     "prettier": "3.3.3",
     "shx": "0.3.4",
     "typescript": "5.4.5",
-    "@walletconnect/types": "2.23.9"
+    "vitest": "4.1.12"
   },
   "dependencies": {
     "@reown/appkit": "1.8.20",
-    "@walletconnect/universal-provider": "2.23.9",
     "@walletconnect/sign-client": "2.23.9",
+    "@walletconnect/universal-provider": "2.23.9",
     "@walletconnect/utils": "2.23.9"
   },
   "engines": {

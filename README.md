@@ -24,16 +24,28 @@ pnpm add @tronweb3/walletconnect-tron
 
 ### Request Parameters
 
-| Argument       | Description                        | Type   |
-| -------------- | ---------------------------------- | ------ |
-| network        | The chain (Mainnet, Shasta, Nile)  | string |
-| options        | WalletConnect client options       | object |
-| themeMode      | Theme mode (`dark` &#124; `light`) | string |
-| themeVariables | Theming variables (`--w3m-*`)      | object |
+| Argument       | Description                                | Type             |
+| -------------- | ------------------------------------------ | ---------------- |
+| network        | The TRON chain ID, see [Network](#network) | string \| number |
+| options        | WalletConnect client options               | object           |
+| themeMode      | Theme mode (`dark` &#124; `light`)         | string           |
+| themeVariables | Theming variables (`--w3m-*`)              | object           |
+
+#### Network
+
+`network` accepts the chain ID as a hex or decimal string, with or without the `tron:` prefix, or as a number. Hex strings are case-insensitive. All forms are converted to the lowercase hex form used by wallets (for example `tron:0x2b6653dc`).
+
+| Network | `WalletConnectChainID` | Hex string                        | Decimal string                    | Number       |
+| ------- | ---------------------- | --------------------------------- | --------------------------------- | ------------ |
+| Mainnet | `Mainnet`              | `tron:0x2b6653dc` or `0x2b6653dc` | `tron:728126428` or `728126428`   | `728126428`  |
+| Shasta  | `Shasta`               | `tron:0x94a9059e` or `0x94a9059e` | `tron:2494104990` or `2494104990` | `2494104990` |
+| Nile    | `Nile`                 | `tron:0xcd8690dc` or `0xcd8690dc` | `tron:3448148188` or `3448148188` | `3448148188` |
+
+A string without the `tron:` prefix that is neither hex nor decimal (for example `'Mainnet'`) throws when the wallet is created.
 
 ```typescript
 interface WalletConnectAdapterConfig {
-  network: WalletConnectChainID;
+  network: WalletConnectChainID | string | number;
   options: SignClientTypes.Options;
   /**
    * Theme mode configuration flag. By default, `themeMode` follows the user's system setting.
@@ -103,7 +115,7 @@ If you want to use your own UI to display the QR code, you can provide an `onUri
 
 ```javascript
 const { address } = await wallet.connect({
-  onUri: (uri) => {
+  onUri: uri => {
     console.log('WalletConnect URI:', uri);
     // Display the QR code using your own UI
     // For example, using the qrcode library:

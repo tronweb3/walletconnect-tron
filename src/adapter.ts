@@ -4,6 +4,7 @@ import type WalletConnectClient from '@walletconnect/sign-client';
 import { UniversalProvider } from '@walletconnect/universal-provider';
 import type { EngineTypes, SessionTypes, SignClientTypes } from '@walletconnect/types';
 import { getSdkError } from '@walletconnect/utils';
+import { normalizeChainId } from './chainId.js';
 import { ClientNotInitializedError } from './errors.js';
 import {
   ChainID,
@@ -16,7 +17,13 @@ import {
 } from './utils.js';
 
 export interface WalletConnectAdapterConfig {
-  network: ChainID;
+  /**
+   * TRON network to connect to. Accepts the chain ID as a hex or decimal string, with or
+   * without the `tron:` prefix (e.g. `tron:0x2b6653dc`, `0x2b6653dc`, `tron:728126428`,
+   * `728126428`), or as a number (e.g. `728126428`).
+   * All forms are converted to the lowercase hex form used by wallets (`tron:0x2b6653dc`).
+   */
+  network: ChainID | string | number;
   options: SignClientTypes.Options;
   /**
    * Theme mode configuration flag. By default themeMode option will be set to user system settings.
@@ -129,7 +136,7 @@ export class WalletConnectWallet {
 
   constructor(config: WalletConnectAdapterConfig) {
     this._options = config.options;
-    this._network = config.network;
+    this._network = normalizeChainId(config.network);
     this._config = config;
   }
 
