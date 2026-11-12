@@ -1,3 +1,11 @@
+## 4.0.4
+
+- `network` now accepts the chain ID as a hex or decimal string, with or without the `tron:` prefix (e.g. `tron:0x2b6653dc`, `0x2b6653dc`, `tron:728126428`, `728126428`), or as a number (e.g. `728126428`). Hex strings are case-insensitive. All forms are converted to the lowercase hex form `tron:0x...`.
+- An invalid `network` (e.g. `'Mainnet'`, an empty string or a negative number) now throws when `WalletConnectWallet` is created instead of failing later in `connect()`.
+- Upgrade the development toolchain to Node.js 24.22.1 and pnpm 11.21.0.
+- Fix security vulnerabilities in the repository lockfile via pnpm overrides, including `axios`, `form-data`, `ws` and `zod`. Published dependencies are unchanged.
+- Add unit tests and run them in CI.
+
 ## 4.0.3
 
 - Add ESLint, Prettier, and GitHub Actions CI for code quality
